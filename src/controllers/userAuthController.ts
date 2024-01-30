@@ -6,7 +6,7 @@ import { httpStatus } from "../utils/httpStatus";
 import { validationResult } from "express-validator";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { accessTokenGen } from "../utils/accessTokenGen";
+import { tokenGen } from "../utils/tokenGen";
 import { Token } from "../models/tokenModel";
 
 export const register = asyncHandler(
@@ -62,7 +62,12 @@ export const register = asyncHandler(
       zip,
     });
 
-    return res.json({ status: "success", data: { user } });
+    const token = tokenGen({ id: user._id, role: "user" });
+    await Token.create({
+      token,
+    });
+
+    return res.json({ status: "success", data: { user, token } });
   }
 );
 
@@ -88,36 +93,28 @@ export const login = asyncHandler(
       return next(appError(400, httpStatus.FAIL, "Invalid Credentials"));
     }
 
-    const accessToken = accessTokenGen({ id: user._id, role: "user" });
-
-    const refreshToken = jwt.sign(
-      { id: user._id, role: "user" },
-      process.env.JWT_REFRESH_SECRET as string,
-      {
-        expiresIn: "1y",
-      }
-    );
+    const token = tokenGen({ id: user._id, role: "user" });
 
     await Token.create({
-      token: refreshToken,
+      token,
     });
 
     return res
-      .cookie("refreshToken", refreshToken, {
+      .cookie("token", token, {
         httpOnly: true,
         sameSite: "none",
         // secure: true,
       })
       .json({
         status: httpStatus.SUCCESS,
-        data: { user, token: accessToken },
+        data: { user, token },
       });
   }
 );
 
 export const logout = asyncHandler(async (req: Request, res: Response) => {
-  const tokenCookie = req.cookies.refreshToken;
-  await Token.findOneAndDelete({ token: tokenCookie });
+  const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
+  await Token.findOneAndDelete({ token: token });
   res.clearCookie("refreshToken", {
     httpOnly: true,
     sameSite: "none",
@@ -128,53 +125,4 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
     status: httpStatus.SUCCESS,
     data: null,
   });
-});
-
-export const refresh = asyncHandler(async (req: Request, res: Response) => {
-  const refreshToken = req.cookies?.refreshToken;
-  if (!refreshToken) {
-    return res.status(401).json({
-      status: httpStatus.FAIL,
-      data: {
-        error: "Unauthorized",
-      },
-    });
-  }
-
-  jwt.verify(
-    refreshToken,
-    process.env.JWT_REFRESH_SECRET as string,
-    async (err: any, decoded: any) => {
-      if (err) {
-        return res.status(403).json({
-          status: httpStatus.FAIL,
-          data: {
-            error: "Invalid token",
-          },
-        });
-      }
-
-      const foundUser = await User.findById(decoded.id);
-
-      if (!foundUser) {
-        return res.status(401).json({
-          status: httpStatus.FAIL,
-          data: {
-            error: "Unauthorized",
-          },
-        });
-      }
-
-      await Token.findOneAndDelete({ token: refreshToken });
-
-      const accessToken = accessTokenGen({ id: foundUser._id, role: "user" });
-
-      return res.status(200).json({
-        status: httpStatus.SUCCESS,
-        data: {
-          token: accessToken,
-        },
-      });
-    }
-  );
 });
