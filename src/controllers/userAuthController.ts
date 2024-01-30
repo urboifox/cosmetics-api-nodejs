@@ -5,7 +5,6 @@ import { appError } from "../utils/appError";
 import { httpStatus } from "../utils/httpStatus";
 import { validationResult } from "express-validator";
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import { tokenGen } from "../utils/tokenGen";
 import { Token } from "../models/tokenModel";
 
@@ -104,6 +103,7 @@ export const login = asyncHandler(
         httpOnly: true,
         sameSite: "none",
         // secure: true,
+        maxAge: 4 * 7 * 24 * 60 * 60 * 1000,
       })
       .json({
         status: httpStatus.SUCCESS,
@@ -112,17 +112,28 @@ export const login = asyncHandler(
   }
 );
 
-export const logout = asyncHandler(async (req: Request, res: Response) => {
-  const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
-  await Token.findOneAndDelete({ token: token });
-  res.clearCookie("refreshToken", {
-    httpOnly: true,
-    sameSite: "none",
-    // secure: true
-  });
+export const logout = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const cookiesToken = req.cookies.token;
+    const headersToken = req.headers.authorization?.split(" ")[1];
 
-  return res.status(200).json({
-    status: httpStatus.SUCCESS,
-    data: null,
-  });
-});
+    if (cookiesToken) {
+      await Token.findOneAndDelete({ token: cookiesToken });
+    } else if (headersToken) {
+      await Token.findOneAndDelete({ token: headersToken });
+    } else {
+      return next(appError(401, httpStatus.FAIL, "No token provided"));
+    }
+
+    res.clearCookie("token", {
+      httpOnly: true,
+      sameSite: "none",
+      // secure: true
+    });
+
+    return res.status(200).json({
+      status: httpStatus.SUCCESS,
+      data: null,
+    });
+  }
+);

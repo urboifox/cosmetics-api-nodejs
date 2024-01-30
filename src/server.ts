@@ -51,3 +51,5 @@ mongoose.connect(process.env.DB_URI as string).then(() => {
     console.log(`Server is running on port ${port}`);
   });
 });
+
+export { app };
