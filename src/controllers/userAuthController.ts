@@ -32,13 +32,17 @@ export const register = asyncHandler(
       );
     }
 
-    const oldUser = await User.findOne(
-      { $or: [{ email }, { phone }] },
-      { email: 1 }
-    );
+    const oldUser = await User.findOne({ email });
     if (oldUser) {
       return next(
         appError(400, httpStatus.FAIL, "This email is already in use")
+      );
+    }
+
+    const oldUserNumber = await User.findOne({ phone });
+    if (oldUserNumber) {
+      return next(
+        appError(400, httpStatus.FAIL, "This phone is already in use")
       );
     }
 
@@ -66,7 +70,15 @@ export const register = asyncHandler(
       token,
     });
 
-    return res.json({ status: "success", data: { user, token } });
+    return res
+      .cookie("token", token, {
+        httpOnly: true,
+        sameSite: "none",
+        // TODO
+        // secure: true,
+        maxAge: 12 * 4 * 7 * 24 * 60 * 60 * 1000,
+      })
+      .json({ status: "success", data: { user, token } });
   }
 );
 
@@ -102,8 +114,9 @@ export const login = asyncHandler(
       .cookie("token", token, {
         httpOnly: true,
         sameSite: "none",
+        // TODO
         // secure: true,
-        maxAge: 4 * 7 * 24 * 60 * 60 * 1000,
+        maxAge: 12 * 4 * 7 * 24 * 60 * 60 * 1000,
       })
       .json({
         status: httpStatus.SUCCESS,
@@ -121,13 +134,12 @@ export const logout = asyncHandler(
       await Token.findOneAndDelete({ token: cookiesToken });
     } else if (headersToken) {
       await Token.findOneAndDelete({ token: headersToken });
-    } else {
-      return next(appError(401, httpStatus.FAIL, "No token provided"));
     }
 
     res.clearCookie("token", {
       httpOnly: true,
       sameSite: "none",
+      // TODO
       // secure: true
     });
 

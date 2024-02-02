@@ -5,7 +5,7 @@ import { login, logout, register } from "../controllers/userAuthController";
 import {
   userRegisterValidationSchema,
   userLoginValidationSchema,
-} from "../utils/validationSchemas";
+} from "../middlewares/validationSchemas";
 
 route.post("/register", userRegisterValidationSchema, register);
 route.post("/login", userLoginValidationSchema, login);
